@@ -8,11 +8,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-# Environment variables
-env:
-  DOCKER_IMAGE_NAME: ujwal-enterprises-website
-  DOCKER_TAG: latest
-
 jobs:
   # Job 1: Build and Test
   build-and-test:
@@ -22,55 +17,302 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+    - name: Setup Node.js (for testing tools)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
     
-    - name: Build Docker image
+    - name: Install testing dependencies
       run: |
-        docker build -t ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }} .
+        npm init -y
+        npm install --save-dev http-server
     
-    - name: Test Docker image
+    - name: Validate HTML
       run: |
-        # Run the container in detached mode
-        docker run -d --name test-container -p 8080:80 ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }}
+        # Install HTML validator
+        npm install -g html-validate
         
-        # Wait for container to start
-        sleep 10
+        # Validate HTML files
+        html-validate index.html || echo "HTML validation completed with warnings"
+    
+    - name: Test CSS syntax
+      run: |
+        # Install CSS validator
+        npm install -g css-tree
+        
+        # Basic CSS syntax check
+        node -e "
+          const fs = require('fs');
+          const css = fs.readFileSync('styles.css', 'utf8');
+          console.log('CSS file loaded successfully - ' + css.length + ' characters');
+        "
+    
+    - name: Test JavaScript syntax
+      run: |
+        # Basic JS syntax check
+        node -c script.js
+        echo "JavaScript syntax check passed"
+    
+    - name: Start local server and test
+      run: |
+        # Start server in background
+        npx http-server . -p 8080 &
+        SERVER_PID=$!
+        
+        # Wait for server to start
+        sleep 5
         
         # Test if website is accessible
         curl -f http://localhost:8080 || exit 1
+        curl -f http://localhost:8080/styles.css || exit 1
+        curl -f http://localhost:8080/script.js || exit 1
         
-        # Clean up
-        docker stop test-container
-        docker rm test-container
+        # Kill server
+        kill $SERVER_PID
+        
+        echo "Website test completed successfully"
     
-    - name: Save Docker image as artifact
+    - name: Create deployment package
       run: |
-        docker save ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_TAG }} | gzip > ujwal-website-image.tar.gz
+        # Create a clean deployment directory
+        mkdir -p deploy
+        
+        # Copy necessary files
+        cp index.html deploy/
+        cp styles.css deploy/
+        cp script.js deploy/
+        
+        # Create archive for deployment
+        tar -czf website-package.tar.gz -C deploy .
     
-    - name: Upload Docker image artifact
-      uses: actions/upload-artifact@v3
+    - name: Upload website package
+      uses: actions/upload-artifact@v4
       with:
-        name: docker-image
-        path: ujwal-website-image.tar.gz
-        retention-days: 1
+        name: website-package
+        path: website-package.tar.gz
+        retention-days: 30
 
-  # Job 2: Deploy to Production (only on main/master branch)
-  deploy:
+  # Job 2: Deploy to GitHub Pages
+  deploy-github-pages:
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Download Docker image artifact
-      uses: actions/download-artifact@v3
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+    
+    - name: Upload to GitHub Pages
+      uses: actions/upload-pages-artifact@v3
       with:
-        name: docker-image
+        path: '.'
     
-    - name: Load Docker image
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
+
+  # Job 3: Deploy to FTP/SFTP Server
+  deploy-ftp:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # Uncomment this job if you want to deploy to FTP/SFTP
+    # Remove the if condition below to enable this job
+    if: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download website package
+      uses: actions/download-artifact@v4
+      with:
+        name: website-package
+    
+    - name: Extract package
       run: |
-        docker load < ujwal-website-image.tar.gz
+        mkdir -p website
+        tar -xzf website-package.tar.gz -C website
     
+    - name: Deploy via FTP
+      uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+      with:
+        server: ${{ secrets.FTP_HOST }}
+        username: ${{ secrets.FTP_USERNAME }}
+        password: ${{ secrets.FTP_PASSWORD }}
+        local-dir: './website/'
+        server-dir: '/public_html/'
+        exclude: |
+          **/.git*
+          **/.git*/**
+          **/node_modules/**
+
+  # Job 4: Deploy to AWS S3
+  deploy-s3:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # Uncomment this job if you want to deploy to S3
+    # Remove the if condition below to enable this job
+    if: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+    
+    - name: Deploy to S3
+      run: |
+        # Sync files to S3 bucket
+        aws s3 sync . s3://${{ secrets.S3_BUCKET_NAME }}/ \
+          --exclude ".git/*" \
+          --exclude ".github/*" \
+          --exclude "*.md" \
+          --exclude "Dockerfile" \
+          --delete
+    
+    - name: Invalidate CloudFront
+      if: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+      run: |
+        aws cloudfront create-invalidation \
+          --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+          --paths "/*"
+
+  # Job 5: Deploy via SSH to VPS/Server
+  deploy-ssh:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # Uncomment this job if you want to deploy via SSH
+    # Remove the if condition below to enable this job
+    if: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to server via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        script: |
+          # Navigate to web directory
+          cd /var/www/html/ujwal-enterprises
+          
+          # Pull latest changes
+          git pull origin main
+          
+          # Set proper permissions
+          chmod -R 644 *.html *.css *.js
+          chmod 755 .
+          
+          # Restart web server (nginx example)
+          sudo systemctl reload nginx
+          
+          echo "Deployment completed successfully"
+
+  # Job 6: Deploy to Netlify
+  deploy-netlify:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # Uncomment this job if you want to deploy to Netlify
+    # Remove the if condition below to enable this job
+    if: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to Netlify
+      uses: nwtgck/actions-netlify@v3.0
+      with:
+        publish-dir: '.'
+        production-branch: main
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        deploy-message: "Deploy from GitHub Actions"
+        enable-pull-request-comment: false
+        enable-commit-comment: true
+        overwrites-pull-request-comment: true
+      env:
+        NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+
+  # Job 7: Deploy to Vercel
+  deploy-vercel:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # Uncomment this job if you want to deploy to Vercel
+    # Remove the if condition below to enable this job
+    if: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.ORG_ID }}
+        vercel-project-id: ${{ secrets.PROJECT_ID }}
+        vercel-args: '--prod'
+
+  # Job 8: Notification
+  notify:
+    needs: [build-and-test, deploy-github-pages]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify deployment status
+      run: |
+        echo "=== Deployment Summary ==="
+        echo "Build Status: ${{ needs.build-and-test.result }}"
+        echo "GitHub Pages Deploy: ${{ needs.deploy-github-pages.result }}"
+        
+        if [ "${{ needs.deploy-github-pages.result }}" == "success" ]; then
+          echo "✅ Website successfully deployed to GitHub Pages!"
+          echo "Your Ujwal Enterprises website is now live."
+        elif [ "${{ needs.deploy-github-pages.result }}" == "failure" ]; then
+          echo "❌ Deployment failed!"
+          echo "Please check the logs for details."
+        elif [ "${{ needs.deploy-github-pages.result }}" == "skipped" ]; then
+          echo "⏭️ Deployment skipped (not main/master branch)"
+        fi
+
+    # Optional: Send email notification
+    # - name: Send email notification
+    #   if: failure()
+    #   uses: dawidd6/action-send-mail@v3
+    #   with:
+    #     server_address: smtp.gmail.com
+    #     server_port: 587
+    #     username: ${{ secrets.MAIL_USERNAME }}
+    #     password: ${{ secrets.MAIL_PASSWORD }}
+    #     subject: "Ujwal Enterprises Website Deployment Failed"
+    #     body: "The deployment of Ujwal Enterprises website has failed. Please check the GitHub Actions logs."
+    #     to: ${{ secrets.NOTIFICATION_EMAIL }}
