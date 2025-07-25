@@ -104,18 +104,45 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set initial active link
     updateActiveLink('#home');
     
-    // Create page loader if it doesn't exist
-    if (!document.querySelector('.page-loader')) {
-        const loader = document.createElement('div');
-        loader.className = 'page-loader';
-        const loaderInner = document.createElement('div');
-        loaderInner.className = 'loader';
-        loader.appendChild(loaderInner);
-        document.body.prepend(loader);
+    // Animate navigation elements
+    const navElements = document.querySelectorAll('nav .animate-on-load');
+    navElements.forEach((element, index) => {
+        setTimeout(() => {
+            element.classList.add('visible');
+        }, 100 + (index * 100));
+    });
+    
+    // Animate service cards with staggered timing
+    const serviceCards = document.querySelectorAll('.service-card.fade-in');
+    serviceCards.forEach((card, index) => {
+        setTimeout(() => {
+            card.classList.add('visible');
+        }, 300 + (index * 150));
+    });
+    
+    // Animate about image with slide-in-right
+    const aboutImage = document.querySelector('.about-image.slide-in-right');
+    if (aboutImage) {
+        setTimeout(() => {
+            aboutImage.classList.add('visible');
+        }, 600);
     }
     
-    // The service card animations are now handled by the animate-on-load class
-    // and the load event handler, so we can remove this code
+    // Animate contact form with slide-in-left
+    const contactForm = document.querySelector('.contact-form.slide-in-left');
+    if (contactForm) {
+        setTimeout(() => {
+            contactForm.classList.add('visible');
+        }, 800);
+    }
+    
+    // Animate any remaining elements
+    const otherElements = document.querySelectorAll('.animate-on-load:not(.visible), .fade-in:not(.visible), .slide-in-left:not(.visible), .slide-in-right:not(.visible)');
+    otherElements.forEach((element, index) => {
+        setTimeout(() => {
+            element.classList.add('visible');
+        }, 1000 + (index * 100));
+    });
 });
 
 // Mobile menu toggle (enhanced version)
