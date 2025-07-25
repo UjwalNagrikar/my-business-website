@@ -1,13 +1,67 @@
-// Smooth scrolling for navigation links
+// Smooth scrolling for navigation links and active link highlighting
 document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     anchor.addEventListener('click', function (e) {
         e.preventDefault();
         const target = document.querySelector(this.getAttribute('href'));
         if (target) {
+            // Close mobile menu if open
+            const navLinks = document.getElementById('navLinks');
+            const mobileMenu = document.getElementById('mobileMenu');
+            navLinks.classList.remove('active');
+            mobileMenu.classList.remove('active');
+            
             target.scrollIntoView({
                 behavior: 'smooth',
                 block: 'start'
             });
+            
+            // Update active link
+            updateActiveLink(this.getAttribute('href'));
+        }
+    });
+});
+
+// Update active navigation link
+function updateActiveLink(targetHref) {
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    document.querySelector(`a[href="${targetHref}"]`).classList.add('active');
+}
+
+// Mobile menu toggle functionality
+function toggleMobileMenu() {
+    const navLinks = document.getElementById('navLinks');
+    const mobileMenu = document.getElementById('mobileMenu');
+    
+    navLinks.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
+}
+
+// Close mobile menu when clicking outside
+document.addEventListener('click', function(e) {
+    const nav = document.querySelector('nav');
+    const navLinks = document.getElementById('navLinks');
+    const mobileMenu = document.getElementById('mobileMenu');
+    
+    if (!nav.contains(e.target)) {
+        navLinks.classList.remove('active');
+        mobileMenu.classList.remove('active');
+    }
+});
+
+// Highlight active section on scroll
+window.addEventListener('scroll', function() {
+    const sections = document.querySelectorAll('section[id]');
+    const scrollPos = window.scrollY + 100;
+    
+    sections.forEach(section => {
+        const sectionTop = section.offsetTop;
+        const sectionHeight = section.offsetHeight;
+        const sectionId = section.getAttribute('id');
+        
+        if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
+            updateActiveLink(`#${sectionId}`);
         }
     });
 });
@@ -36,83 +90,40 @@ document.querySelector('.contact-form').addEventListener('submit', function(e) {
 // Add scroll effect to header
 window.addEventListener('scroll', function() {
     const header = document.querySelector('header');
-    if (window.scrollY > 100) {
-        header.style.background = 'rgba(30, 60, 114, 0.95)';
+    if (window.scrollY > 50) {
+        header.style.background = 'rgba(44, 62, 80, 0.95)';
         header.style.backdropFilter = 'blur(10px)';
     } else {
-        header.style.background = 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)';
+        header.style.background = '#2c3e50';
         header.style.backdropFilter = 'none';
     }
 });
 
-// Animate stats on scroll
-function animateStats() {
-    const stats = document.querySelectorAll('.stat-item h3');
-    stats.forEach(stat => {
-        const originalText = stat.textContent;
-        const hasPlus = originalText.includes('+');
-        const hasSlash = originalText.includes('/');
-        
-        let target;
-        if (hasSlash) {
-            // Handle "24/7" case
-            return;
-        } else {
-            target = parseInt(originalText.replace('+', ''));
-        }
-        
-        if (isNaN(target)) return;
-        
-        const increment = target / 100;
-        let current = 0;
-        
-        const timer = setInterval(() => {
-            current += increment;
-            if (current >= target) {
-                stat.textContent = target + (hasPlus ? '+' : '');
-                clearInterval(timer);
-            } else {
-                stat.textContent = Math.floor(current) + (hasPlus ? '+' : '');
-            }
-        }, 20);
-    });
-}
-
-// Intersection Observer for animations
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting && entry.target.classList.contains('stats')) {
-            animateStats();
-            observer.unobserve(entry.target);
-        }
-    });
-});
-
-// Initialize animations when DOM is loaded
+// Initialize animations and set initial active link when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    const statsSection = document.querySelector('.stats');
-    if (statsSection) {
-        observer.observe(statsSection);
+    // Set initial active link
+    updateActiveLink('#home');
+    
+    // Create page loader if it doesn't exist
+    if (!document.querySelector('.page-loader')) {
+        const loader = document.createElement('div');
+        loader.className = 'page-loader';
+        const loaderInner = document.createElement('div');
+        loaderInner.className = 'loader';
+        loader.appendChild(loaderInner);
+        document.body.prepend(loader);
     }
     
-    // Add fade-in animation to service cards
-    const serviceCards = document.querySelectorAll('.service-card');
-    serviceCards.forEach((card, index) => {
-        card.style.opacity = '0';
-        card.style.transform = 'translateY(20px)';
-        
-        setTimeout(() => {
-            card.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
-            card.style.opacity = '1';
-            card.style.transform = 'translateY(0)';
-        }, index * 100);
-    });
+    // The service card animations are now handled by the animate-on-load class
+    // and the load event handler, so we can remove this code
 });
 
-// Mobile menu toggle (if you want to add mobile menu later)
+// Mobile menu toggle (enhanced version)
 function toggleMobileMenu() {
     const navLinks = document.querySelector('.nav-links');
+    const mobileMenu = document.querySelector('.mobile-menu');
     navLinks.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
 }
 
 // Form validation
@@ -183,8 +194,57 @@ window.addEventListener('scroll', () => {
 });
 
 // Add loading animation for page
-window.addEventListener('load', () => {
+window.addEventListener('load', function() {
+    // First make sure body is visible
     document.body.classList.add('loaded');
+    
+    // Hide loader after a delay
+    setTimeout(function() {
+        const loader = document.querySelector('.page-loader');
+        if (loader) {
+            loader.classList.add('hidden');
+        }
+        
+        // Animate elements with animate-on-load class with staggered timing
+        const navElements = document.querySelectorAll('nav .animate-on-load');
+        navElements.forEach((element, index) => {
+            setTimeout(() => {
+                element.classList.add('visible');
+            }, 300 + (index * 100));
+        });
+        
+        // Animate service cards with more delay
+        const serviceCards = document.querySelectorAll('.service-card.animate-on-load');
+        serviceCards.forEach((card, index) => {
+            setTimeout(() => {
+                card.classList.add('visible');
+            }, 800 + (index * 150));
+        });
+        
+        // Animate about section
+        const aboutElements = document.querySelectorAll('.about .animate-on-load');
+        aboutElements.forEach((element, index) => {
+            setTimeout(() => {
+                element.classList.add('visible');
+            }, 1200 + (index * 200));
+        });
+        
+        // Animate contact section
+        const contactElements = document.querySelectorAll('.contact .animate-on-load');
+        contactElements.forEach((element, index) => {
+            setTimeout(() => {
+                element.classList.add('visible');
+            }, 1500 + (index * 200));
+        });
+        
+        // Animate any remaining elements
+        const otherElements = document.querySelectorAll('.animate-on-load:not(.visible)');
+        otherElements.forEach((element, index) => {
+            setTimeout(() => {
+                element.classList.add('visible');
+            }, 1800 + (index * 100));
+        });
+    }, 1000); // Delay before hiding loader
 });
 
 // Lazy loading for images (if you add images later)
