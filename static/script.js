@@ -67,24 +67,21 @@ window.addEventListener('scroll', function() {
 });
 
 // Form submission handler
-document.querySelector('.contact-form').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    // Get form data
-    const formData = new FormData(this);
-    const data = {};
-    formData.forEach((value, key) => {
-        data[key] = value;
-    });
-    
-    // Show success message
-    alert('Thank you for your message! We will get back to you soon.');
-    
-    // Reset form
-    this.reset();
-    
-    // You can add actual form submission logic here
-    console.log('Form data:', data);
+document.addEventListener('DOMContentLoaded', function() {
+    const contactForm = document.querySelector('.contact-form');
+    if (contactForm) {
+        contactForm.addEventListener('submit', function(e) {
+            // Validate form before submission
+            if (!validateForm()) {
+                e.preventDefault();
+                alert('Please fill in all required fields correctly.');
+                return;
+            }
+            
+            // Let the form submit normally to Flask backend
+            // The form will be processed by the /submit route
+        });
+    }
 });
 
 // Add scroll effect to header
